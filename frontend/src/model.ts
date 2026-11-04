@@ -203,6 +203,10 @@ export interface Furniture extends LightEffectConfig {
   glow_scale?: number | null;
   /** Screens: how strongly the glow behind a playing TV shines, 0 to 1.5 (null = 1, 0 = off). */
   ambilight?: number | null;
+  /** Screens: the device on it (a games console); the screen stays dark while it is off. */
+  screen_device?: string | null;
+  /** Screens: "In game" sensors of game accounts; the first that is on shows its game and artwork. */
+  screen_sources?: string[];
   /** An own symbol for the marker: a Material Design icon name without "mdi:" (null = by kind). */
   icon?: string | null;
   /** Linked entity, e.g. the TV's media player (null = automatic, "none" = none). */

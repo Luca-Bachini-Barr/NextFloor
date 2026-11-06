@@ -6,7 +6,7 @@ All notable changes to NextFloor, newest first. Every release lists what is **Ad
 
 ### Added
 
-- **A monitor shows the game on an Xbox**: the form of a TV or monitor has *Device on this screen* and *Game account*. With the console and the *In game* sensors of its accounts set, the screen shows the game and its artwork of whichever account is playing, and stays dark while the console is off.
+- **A monitor shows the game on an Xbox**: the form of a TV or monitor has *Device on this screen* and *Game account*. With the console and the *In game* sensors of its accounts set, the screen shows the game and its artwork of whichever account is playing, and stays dark while the console is off. A card above the screen shows the same game and artwork.
 - **Sanitary pack VIGOUR derby** (thanks @huepfer13, #63): a wall-hung WC, a urinal, a 60 cm washbasin, a paper towel dispenser and a soap dispenser in the sizes of the VIGOUR derby series. That makes 41 furniture packs.
 
 ## 0.24.0

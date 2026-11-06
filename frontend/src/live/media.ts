@@ -19,6 +19,8 @@ export interface MediaNow {
   app: string | null;
   /** Other players playing the same (multiroom), as reported by the player. */
   group: string[];
+  /** A game on a monitor: nothing here can control it, so its card has no buttons. */
+  game?: boolean;
 }
 
 /** App colours: the ring around a speaker and the card's edge take the colour of what plays. */

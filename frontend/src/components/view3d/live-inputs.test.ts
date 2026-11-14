@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { box, entity, floorWith, hassOf } from "../../entities/fixtures.ts";
 import type { Building, Furniture } from "../../model.ts";
+import { gameNow } from "../../live/screen-sources.ts";
 import { liveScreens, readSun, roofWindowStates, skyLightness } from "./live-inputs.ts";
 
 const tv = (extra: Partial<Furniture> = {}): Furniture => ({ id: "tv", type: "tv_board", x: 2, z: 2, rotation: 0, w: 1.4, d: 0.4, h: 0.5, variant: null, ...extra });
@@ -28,6 +29,78 @@ test("a TV that only reports 'on' shows its channel or input, a bare 'on' shows 
   assert.deepEqual([screen.title, screen.app, screen.picture, screen.playing], ["ITV1 HD", "TV/HDMI", "/logo", true]);
   const bare = hassOf([entity("media_player.tv", "on", { device_class: "tv" })]);
   assert.deepEqual(liveScreens(bare, house([tv()]), new Map([["tv", { entity: "media_player.tv", power: null }]]) as never), []);
+});
+
+const xboxHass = (console: string, account: "a" | "b" | null) => {
+  const hass = hassOf([
+    entity("media_player.xbox", console),
+    entity("binary_sensor.a_in_game", account === "a" ? "on" : "off"),
+    entity("sensor.a_playing", account === "a" ? "Halo" : "unknown"),
+    entity("image.a_hero", "t", { entity_picture: "/a-hero" }),
+    entity("image.a_square", "t", { entity_picture: "/a-square" }),
+    entity("binary_sensor.b_in_game", account === "b" ? "on" : "off"),
+    entity("sensor.b_playing", account === "b" ? "Forza" : "unknown"),
+    entity("image.b_now", "t", { entity_picture: "/b-now" }),
+  ]);
+  hass.entities = {
+    "binary_sensor.a_in_game": { entity_id: "binary_sensor.a_in_game", device_id: "a", translation_key: "in_game" },
+    "sensor.a_playing": { entity_id: "sensor.a_playing", device_id: "a", translation_key: "now_playing" },
+    "image.a_hero": { entity_id: "image.a_hero", device_id: "a", translation_key: "titled_hero_art" },
+    "image.a_square": { entity_id: "image.a_square", device_id: "a", translation_key: "feature_promotional_square_art" },
+    "binary_sensor.b_in_game": { entity_id: "binary_sensor.b_in_game", device_id: "b", translation_key: "in_game" },
+    "sensor.b_playing": { entity_id: "sensor.b_playing", device_id: "b", translation_key: "now_playing" },
+    "image.b_now": { entity_id: "image.b_now", device_id: "b", translation_key: "now_playing" },
+  } as never;
+  return hass;
+};
+const monitor = () => tv({ screen_device: "media_player.xbox", screen_sources: ["binary_sensor.a_in_game", "binary_sensor.b_in_game"] });
+
+test("a screen on a console shows the game and artwork of the account that plays", () => {
+  const shown = (account: "a" | "b") => liveScreens(xboxHass("on", account), house([monitor()]), null).map((s) => [s.title, s.picture, s.playing]);
+  assert.deepEqual(shown("a"), [["Halo", "/a-hero", true]], "the wide art first");
+  assert.deepEqual(shown("b"), [["Forza", "/b-now", true]], "the next art when there is no wide one");
+});
+
+test("a screen on a console stays dark while the console is off or nobody plays", () => {
+  for (const state of ["off", "standby", "unavailable", "unknown"]) assert.deepEqual(liveScreens(xboxHass(state, "a"), house([monitor()]), null), [], state);
+  assert.deepEqual(liveScreens(xboxHass("on", null), house([monitor()]), null), []);
+});
+
+test("the console also holds back the screen's own player", () => {
+  const hass = xboxHass("off", null);
+  hass.states["media_player.tv"] = entity("media_player.tv", "playing", { media_title: "x" });
+  const links = new Map([["tv", { entity: "media_player.tv", power: null }]]) as never;
+  assert.deepEqual(liveScreens(hass, house([monitor()]), links), []);
+  assert.deepEqual(liveScreens(hass, house([tv()]), links).map((s) => s.title), ["x"], "without a device nothing changes");
+});
+
+test("a game without a title or art still shows, with what is known", () => {
+  const hass = xboxHass("on", "a");
+  hass.states["sensor.a_playing"] = entity("sensor.a_playing", "unavailable");
+  delete hass.states["image.a_hero"];
+  delete hass.states["image.a_square"];
+  assert.deepEqual(liveScreens(hass, house([monitor()]), null).map((s) => [s.title, s.picture]), [["", null]]);
+});
+
+test("a game on a screen makes a card without a player's controls, only while the console is on", () => {
+  const at = { floorId: "g", x: 2, z: 2, y: 1 };
+  const card = gameNow(xboxHass("on", "a"), monitor(), "Monitor", at);
+  assert.deepEqual([card?.entity, card?.title, card?.picture, card?.playing, card?.game, card?.name], ["tv", "Halo", "/a-hero", true, true, "Monitor"]);
+  assert.equal(gameNow(xboxHass("off", "a"), monitor(), "Monitor", at), null, "console off");
+  assert.equal(gameNow(xboxHass("on", null), monitor(), "Monitor", at), null, "nobody plays");
+  assert.equal(gameNow(xboxHass("on", "a"), tv(), "TV", at), null, "a plain TV has no game");
+});
+
+test("a game names the account that plays: the device's name, the user's own name first, nothing without a device", () => {
+  const at = { floorId: "g", x: 2, z: 2, y: 1 };
+  const hass = xboxHass("on", "a");
+  hass.devices = { a: { id: "a", name: "Gamertag" }, b: { id: "b", name: "Other" } } as never;
+  assert.equal(gameNow(hass, monitor(), "Monitor", at)?.artist, "Gamertag");
+  assert.deepEqual(liveScreens(hass, house([monitor()]), null).map((s) => s.subtitle), ["Gamertag"]);
+  hass.devices = { a: { id: "a", name: "Gamertag", name_by_user: "Own name" } } as never;
+  assert.equal(gameNow(hass, monitor(), "Monitor", at)?.artist, "Own name");
+  hass.devices = {};
+  assert.equal(gameNow(hass, monitor(), "Monitor", at)?.artist, "");
 });
 
 test("a roof window motor sets the sash by its position, or open and closed by its state", () => {
